@@ -1,0 +1,147 @@
+#!/bin/ksh
+
+# {{{ hashid, format, abort, report 
+hashid()
+{
+    base="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    number=${1:-$$$(date +%j%H%M%S)}
+
+    while [ $number -gt 0 ]; do
+        hash="${hash:-""}${base:$(($number % ${#base})):1}"
+        number=$(($number / ${#base}))
+    done
+
+    echo ${hash:-"(failed)"}
+}
+format()
+{
+    gawk -v VJID=${JOB_ID} -v VPAR="${PARAMS:-(no params)}" '
+        BEGIN { bt=systime(); printf("[ %s %8s ] %s\n", strftime("%Y%m%d.%H%M%S"),VJID,"#  ---- " VJID " ----");
+            printf("[ %s %8s ] %s\n", strftime("%Y%m%d.%H%M%S"),VJID,"Started with: " VPAR); fflush(); }
+        { printf("[ %s %8s ] %s\n", strftime("%Y%m%d.%H%M%S"),VJID,$0); fflush(); }
+        END { et=systime(); ela=et-bt; h=int(ela/3600); m=int((ela-h*3600)/60); s=(ela-h*3600-m*60); if ( ela >= 3600) dones=sprintf("%02dh:%02dm:%02ds",h,m,s); else dones=sprintf("%02dm:%02ds",m,s);
+            printf("[ %s %8s ] %s\n", strftime("%Y%m%d.%H%M%S"),VJID,"Done in " dones " (" ela " seconds)"); }
+    '
+}
+abort()
+{
+    [ ! -s "${CHILDPIDFILE}" ] && { echo "Bad job implementation, expected file \"${CHILDPIDFILE}\" not found"; exit 255; }
+
+    CHILDPID=$( sed -e '1 !d' ${CHILDPIDFILE} )
+    SIGNUM=${1:-"TERM"}
+    [ "${SIGNUM}" = "INT" -o "${SIGNUM}" = "QUIT" ] && SIGNUM=TERM
+    kill -${SIGNUM} "${CHILDPID}"
+
+    sleep 3
+}
+report()
+{
+    BODY=$1
+    SEV="${2:-""}"
+
+    SENDMAIL=Y
+    if [ ! "x$SEV" = "x" ]; then
+        SUBJ="$SEV: $SUBJ requires attention"
+        DELAYFILE="$PG_BASE/tmp/pgjob.delay.${PG_ID}.$( echo $SEV|tr [A-Z] [a-z]|sed -e 's/[^a-z]//g' )"
+    else
+        SUBJ="Report: $SUBJ completed"
+    fi
+
+    if [ ! "x${DELAYFILE:-""}" = "x" -a -s "${DELAYFILE:-""}" ]; then
+        LASTDT=$( date -r "${DELAYFILE}" +%s )
+        CURRDT=$( date +%s )
+        [ $(( $CURRDT - $LASTDT )) -le 21600 ] && SENDMAIL=N
+        # 3600  1h
+        # 10800 3h
+        # 21600 6h
+        # 43200 12h
+        # 86400 24h
+    fi
+
+    if [ "${SENDMAIL}" = "Y" ]; then
+        echo "${BODY}" | mailx -s "${SUBJ}" ${PG_ADMINS:-vyegorov@gmail.com}
+        [ ! "x${DELAYFILE:-""}" = "x" ] && touch -t $( date +%Y%m%d%H%M.00 ) "${DELAYFILE}"
+    fi
+}
+# }}}
+
+[ $# -lt 2 ] && exit 10
+
+set -o allexport
+JOB_NAME=$1
+shift
+PG_ID=$1
+shift
+PARAMS=$@
+
+LOG_NAME=$JOB_NAME-$(date "+%Y%m").log
+PID=$$
+
+SELFNAME=${0##*/}
+SELFPATH=${0%/*}
+[ "${SELFPATH}" = "." ] && SELFPATH=$(pwd)
+case "${PATH}" in
+    *${SELFPATH}*) ;;
+    *) PATH=$PATH:$SELFPATH ;;
+esac
+
+. pgenv -q; RETCODE=$?
+
+[ $RETCODE -gt 0 ] && { report "Cannot setup PostgreSQL environment for cluster \"$PG_ID\", check your configuration!" "!! CRITICAL !!"; exit 1; }
+
+JOB_DIR=$PG_BASE/bin/jobs
+CHILDPIDFILE="${PG_BASE}/tmp/${PG_ID}.${JOB_NAME}.${PID}.childpid"
+
+exec 2>&-
+
+trap "abort HUP" HUP
+trap "abort INT" INT
+trap "abort QUIT" QUIT
+trap "abort ABRT" ABRT
+trap "abort ALRM" ALRM
+trap "abort TERM" TERM
+
+mkdir -p ${PG_LOG}
+cd ${JOB_DIR}
+JOB_ID=$(hashid)
+
+(
+    {
+        echo
+        "./${JOB_NAME}" ${CHILDPIDFILE} $@ 2>&1
+        RETCODE=$?
+        echo $RETCODE > $PG_BASE/tmp/$PG_ID.$JOB_NAME.$PID.retcode
+        echo
+        echo "RETCODE=${RETCODE}"
+    } | format >> ${PG_LOG}/${LOG_NAME}
+) &
+
+JOB_PID=$!
+wait $JOB_PID
+# the above `wait' command will be terminated by signal
+# further final reporting is fine
+
+# A bit ugly, but job can deliver a custom message in the pidfile, it will contain 2 lines
+if [ $(cat "${CHILDPIDFILE}"|wc -l) -eq 2 ]; then
+    CUSTOM_SUBJECT=$(sed -e '2 !d' "${CHILDPIDFILE}")
+    SUBJ="${CUSTOM_SUBJECT} (${JOB_NAME}) on ${PG_ID}@${PG_HOST}"
+else
+    SUBJ="Job \"${JOB_NAME}\" on ${PG_ID}@${PG_HOST}"
+fi
+rm -f "${CHILDPIDFILE}"
+
+RETCODE=255
+[ -s "$PG_BASE/tmp/$PG_ID.$JOB_NAME.$PID.retcode" ] && RETCODE=$( { cat $PG_BASE/tmp/$PG_ID.$JOB_NAME.$PID.retcode; rm -f $PG_BASE/tmp/$PG_ID.$JOB_NAME.$PID.retcode; } );
+
+if [ ${RETCODE} -gt 2 ]; then
+    if [ ${RETCODE} -ge 8 ]; then
+        SEV="WARNING"
+        [ ${RETCODE} -ge 240 ] && SEV="!! CRITICAL !!"
+    fi
+
+    report "$( grep "${JOB_ID}" ${PG_LOG}/${LOG_NAME} )" "${SEV:-""}"
+fi
+
+
+#
+# vim:ts=4 et sw=4 ai
