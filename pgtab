@@ -1,0 +1,32 @@
+# /etc/pgtab
+#
+# PostrgeSQL target configuration file
+#
+# All lines starting with hash sign (#) or empty ones are ignored
+# the rest should be of the following form:
+# PG_ID:PG_HOME:PG_BASE:PG_CONNINFO:PG_MASTER:PG_ADMINS:PG_AUTO
+#
+# PG_ID       Target name to be reference target in all the scripts
+# PG_HOME     Location of the PostgreSQL distribution, the one specified via --prefix
+# PG_BASE     Basement of PostgreSQL adminstrative setup, defaults to owning user's home
+#             specified in /etc/passwd
+#             Typical directories:
+#             arch/           location of archived WAL files (subdirectories named by PG_ID)
+#             bin/            binary scripts
+#             bin/jobs/       jobs to be executed via `pgjob`
+#             data/           PostgreSQL target homes (subdirectories named by PG_ID)
+#             etc/            configuration files used by scripts
+#             log/            PostgreSQL runtime logs (subdirectories named by PG_ID)
+#             src/            sources of PostgreSQL, third-party tools and scripts
+#             tmp/            temporary files location
+#
+# PG_CONNINFO Conninfo string for the (remote) databases
+# PG_MASTER   Specifies the PG_ID and host of the Master PostgreSQL instance the current one
+#             being a Standby for. Should be in the form "PG_ID@HOSTNAME", terminal title will
+#             be updated accordingly
+# PG_ADMINS   List of administrator e-mails that will receive scary messages
+# PG_AUTO     If set to 'Y', then PostgreSQL database will be honored by init scripts
+#             NOTE! Keep this field the last one!
+#
+
+PG93:/usr/lib/pgsql-9.3::::vyegorov@gmail.com:Y

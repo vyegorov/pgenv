@@ -1,0 +1,9 @@
+1. Option to initialize filesystem structure
+
+2. Job to load CSV logs into the DB (extension?)
+
+3. Option to check presense of:
+
+  * expected folders on the filesystem
+  * postgresql binaries in the specified location
+

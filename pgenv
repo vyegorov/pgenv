@@ -1,0 +1,156 @@
+#!/bin/ksh
+#
+#  Define PostgreSQL environment variables for ease of work
+#
+#  NOT: You must run this script as ". pgenv" to export environment due to shell nature
+
+#  -- Defaults --
+_TAB=/etc/pgtab
+
+# {{{  -- Tracing? --
+case ${PGENV_TRACE:-""} in
+    ON) set -o xtrace ;;
+esac
+unset PGENV_TRACE
+# }}}
+# {{{  -- Simple cases first --
+if [ "$1" = "-i" ]; then
+    set|grep ^PG
+    return 0
+fi
+if [ "$1" = "-h" ]; then
+    echo "${0##*/} [-h] [-i] [-q]"
+    echo "  -h\thelp message"
+    echo "  -i\tinformation bout environment"
+    echo "  -q\toperate quietly"
+    return 0
+fi
+# }}}
+# {{{  -- Check the environment --
+[ -t 1 ] || _TERM=YES
+[ "$1" = "-q" ] && _TERM=NO
+PG_OLD_BASE=${PG_BASE:-${PATH}}
+PG_OLD_HOME=${PG_HOME:-${PATH}}
+PG_OLD=${PG_ID:-${PATH}}
+PG_HOST=$(uname -n|gawk -F. '{print $1}')
+unset PGENV PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
+# }}}
+# {{{  -- Get list of targets --
+#
+#  Defaults to the only one around, if this is the case
+if [ "${SHELL##*/}" = "ksh" ]; then
+    set -A _TARGETS $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | gawk -F: '{print $1}')
+else
+    _TARGETS=( $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | gawk -F: '{print $1}') )
+fi
+case ${#_TARGETS[*]} in
+    0)  [ ${_TERM} = "YES" ] && echo "Nothing mentioned in ${_TAB}"
+       set +o xtrace
+       return 1 ;;
+    1)  PG_ID=${_TARGETS[0]} ;;
+esac
+# }}}
+# {{{  -- From here on all variables are exported --
+set -o allexport
+if [ "${_TERM:-""}" = "YES" ]; then
+    if [ ${#_TARGETS[*]} -gt 1 ]; then
+        i=1
+        echo "Choose [1..${#_TARGETS[*]}] or name: "
+        for id in ${_TARGETS[*]}; do
+            printf " %2d - %s\n" $i $id
+            (( i=i+1 ))
+        done
+        [ "x${PG_ID:-""}" = "x" ] && PG_ID=${_TARGETS[0]}
+
+        printf "Cluster = [$PG_ID] ? "
+        read PG_NEW
+        [ -z $(echo $PG_NEW | sed -e 's/[0-9]//g') ] && [ ! "x$PG_NEW" = "x" ] && PG_NEW=${_TARGETS[$PG_NEW-1]}
+    fi
+    #  -- Check input
+    case "${PG_NEW:-""}" in
+      "") ;;
+      *) PG_ID=${PG_NEW} ;;
+    esac
+fi
+# }}}
+# {{{  -- PG_ID can be empty here in case `-q` switch was used
+# XXX: Should anyhting be unser here?
+if [ "x${PG_ID}" = "x" ]; then
+    set +o xtrace
+    return 1
+fi
+# }}}
+# {{{  -- Locate and set new target
+PG_HOME=$(grep -vE "^#|^[ \t]*\$" "${_PGTAB}" | grep "^$PG_ID:" | gawk -F: '{print $2}')
+if [ ! -x $PG_HOME/bin/psql ]; then
+    PG_ID=$PG_OLD
+    unset PG_HOME PG_OLD PG_OLD_BASE _TERM PGENV_TRACE
+    set +o xtrace
+    return 1
+fi
+PG_BASE=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $3}')
+[ "x${PG_BASE}" = "x" ] && PG_BASE=$(grep postgres /etc/passwd|gawk -F: '{print $6}')
+PG_CONNINFO=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $4}')
+PG_MASTER=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $5}')
+PG_ADMINS=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $6}')
+# {{{  Display a hint for the Standby
+if [ "x${PG_MASTER}" = "x" ]; then
+    PG_TITLE="${PG_ID}@${PG_HOST}"
+else
+    PG_TITLE="Standby for ${PG_MASTER}"
+
+    if [ "${_TERM:-""}" = "YES" ]; then
+        echo
+        echo
+        echo "#  ----   S T A N D B Y   F A I L O V E R   ----"
+        echo
+        echo "To activate Standby, use any of the following:"
+        echo "1) pg_ctl promote"
+        echo "2) touch ${PG_BASE}/tmp/activate_${PG_ID}"
+        echo
+    fi
+fi
+# }}}
+PG_AUTOSTART=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $7}')
+OFS=$IFS
+if [ "${SHELL##*/}" = "ksh" ]; then
+    IFS=: set -A PGENV $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:")
+else
+    IFS=: PGENV=( $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:") )
+fi
+IFS=$OFS
+
+PG_LOG=${PG_BASE}/log/${PG_ID}
+PG_WAL=${PG_BASE}/wal/${PG_ID}
+PG_ARCH=${PG_BASE}/arch/${PG_ID}
+PG_DATA=${PG_BASE}/data/${PG_ID}
+if [ ! -s $PG_DATA/postgresql.conf ]; then
+    unset PGPORT
+else
+    PGPORT=$( grep "^#*port" $PG_DATA/postgresql.conf|sed -e 's/^#*//' -e 's/#.*$//'|gawk -F= '{gsub(/[ \t]/, "", $2); print $2}' )
+fi
+PG_VERSION=$($PG_HOME/bin/initdb --version|gawk '{ print $NF}')
+PG_MAJOR=$(echo ${PG_VERSION} | sed -e 's/\(\.[^.]*\)\..*$/\1/')
+
+PGDATA=${PG_DATA}
+# }}}
+# {{{  -- Put new PG_ID into PATH and reset other vars --
+PG_BIN="${PG_HOME}/bin"
+if [ -d "${PG_BIN}" ]; then
+    case "$PATH" in
+      *${PG_OLD_HOME}/bin*) PATH=`echo ${PATH} | sed "s;${PG_OLD_HOME}/bin;${PG_BIN};g"` ;;
+      *${PG_BIN}*) ;;
+      *:) PATH=${PATH}${PG_BIN} ;;
+      "") PATH=${PG_BIN} ;;
+      *) PATH=${PATH}:${PG_BIN} ;;
+    esac
+fi
+# }}}
+#[ ${_TERM} = "YES" ] && echo "Cluster set to ${PG_ID} with base at $PG_BASE"
+unset PG_OLD PG_NEW PG_OLD_HOME PG_OLD_BASE _TERM PGENV_TRACE PG_BIN
+set +o allexport
+set +o xtrace
+
+#
+# vim:ts=4 et sw=4 ai
+#
