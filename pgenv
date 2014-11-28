@@ -6,28 +6,33 @@
 
 #  -- Defaults --
 _TAB=/etc/pgtab
+_TERM=NO
+_TRACE=NO
 
-# {{{  -- Tracing? --
-case ${PGENV_TRACE:-""} in
-    ON) set -o xtrace ;;
-esac
-unset PGENV_TRACE
-# }}}
-# {{{  -- Simple cases first --
-if [ "$1" = "-i" ]; then
-    set|grep ^PG
-    return 0
-fi
-if [ "$1" = "-h" ]; then
-    echo "${0##*/} [-h] [-i] [-q]"
-    echo "  -h\thelp message"
-    echo "  -i\tinformation bout environment"
-    echo "  -q\toperate quietly"
-    return 0
-fi
+
+# {{{  -- Arguments --
+while [ "$#" -gt 0 ]; do case "$1" in
+    "-d")   #  -- Debuggin info --
+        _TRACE=YES ;;
+    "-i")   #  -- Current target --
+        set|grep ^PG
+        set +o xtrace
+        return 0 ;;
+    "-h")   #  -- Help message --
+        echo "${0##*/} [-h] [-i] [-q]"
+        echo "  -h\thelp message"
+        echo "  -i\tinformation bout environment"
+        echo "  -q\toperate quietly"
+        return 0 ;;
+    esac
+    shift
+done
+#  Enable tracing if asked for
+[ "${_TRACE}" = "YES" ] && set -o xtrace
 # }}}
 # {{{  -- Check the environment --
-[ -t 1 ] || _TERM=YES
+: Show this comment
+[ -t 1 ] && _TERM=YES
 [ "$1" = "-q" ] && _TERM=NO
 PG_OLD_BASE=${PG_BASE:-${PATH}}
 PG_OLD_HOME=${PG_HOME:-${PATH}}
@@ -51,6 +56,7 @@ case ${#_TARGETS[*]} in
 esac
 # }}}
 # {{{  -- From here on all variables are exported --
+# XXX: Don't think this is a good idea any longer
 set -o allexport
 if [ "${_TERM:-""}" = "YES" ]; then
     if [ ${#_TARGETS[*]} -gt 1 ]; then
@@ -81,10 +87,11 @@ if [ "x${PG_ID}" = "x" ]; then
 fi
 # }}}
 # {{{  -- Locate and set new target
-PG_HOME=$(grep -vE "^#|^[ \t]*\$" "${_PGTAB}" | grep "^$PG_ID:" | gawk -F: '{print $2}')
+: Locating new target $PG_ID
+PG_HOME=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $2}')
 if [ ! -x $PG_HOME/bin/psql ]; then
     PG_ID=$PG_OLD
-    unset PG_HOME PG_OLD PG_OLD_BASE _TERM PGENV_TRACE
+    unset PG_HOME PG_OLD PG_OLD_BASE _TERM _TRACE
     set +o xtrace
     return 1
 fi
@@ -147,7 +154,7 @@ if [ -d "${PG_BIN}" ]; then
 fi
 # }}}
 #[ ${_TERM} = "YES" ] && echo "Cluster set to ${PG_ID} with base at $PG_BASE"
-unset PG_OLD PG_NEW PG_OLD_HOME PG_OLD_BASE _TERM PGENV_TRACE PG_BIN
+unset PG_OLD PG_NEW PG_OLD_HOME PG_OLD_BASE _TERM _TRACE PG_BIN
 set +o allexport
 set +o xtrace
 
