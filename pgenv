@@ -8,7 +8,7 @@
 _TAB=/etc/pgtab
 _TERM=NO
 _TRACE=NO
-
+[ -t 1 ] && _TERM=YES
 
 # {{{  -- Arguments --
 while [ "$#" -gt 0 ]; do case "$1" in
@@ -18,6 +18,8 @@ while [ "$#" -gt 0 ]; do case "$1" in
         set|grep ^PG
         set +o xtrace
         return 0 ;;
+    "-q")   #  -- Quiet --
+        _TERM=NO ;;
     "-h")   #  -- Help message --
         echo "${0##*/} [-h] [-i] [-q]"
         echo "  -h\thelp message"
@@ -31,9 +33,7 @@ done
 [ "${_TRACE}" = "YES" ] && set -o xtrace
 # }}}
 # {{{  -- Check the environment --
-: Show this comment
-[ -t 1 ] && _TERM=YES
-[ "$1" = "-q" ] && _TERM=NO
+: Saving previous values
 PG_OLD_BASE=${PG_BASE:-${PATH}}
 PG_OLD_HOME=${PG_HOME:-${PATH}}
 PG_OLD=${PG_ID:-${PATH}}
@@ -43,6 +43,7 @@ unset PGENV PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
 # {{{  -- Get list of targets --
 #
 #  Defaults to the only one around, if this is the case
+: Get list of targets
 if [ "${SHELL##*/}" = "ksh" ]; then
     set -A _TARGETS $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | gawk -F: '{print $1}')
 else
@@ -59,6 +60,7 @@ esac
 # XXX: Don't think this is a good idea any longer
 set -o allexport
 if [ "${_TERM:-""}" = "YES" ]; then
+    : Choosing target
     if [ ${#_TARGETS[*]} -gt 1 ]; then
         i=1
         echo "Choose [1..${#_TARGETS[*]}] or name: "
@@ -80,7 +82,7 @@ if [ "${_TERM:-""}" = "YES" ]; then
 fi
 # }}}
 # {{{  -- PG_ID can be empty here in case `-q` switch was used
-# XXX: Should anyhting be unser here?
+# XXX: Should anyhting be unset here?
 if [ "x${PG_ID}" = "x" ]; then
     set +o xtrace
     return 1
