@@ -1,0 +1,6 @@
+# editor backups
+*~
+.*.swp
+
+# OSX
+.DS_Store
