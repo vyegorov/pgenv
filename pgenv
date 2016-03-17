@@ -1,4 +1,4 @@
-#!/bin/ksh
+#!/bin/sh
 #
 #  Define PostgreSQL environment variables for ease of work
 #
@@ -36,7 +36,7 @@ done
 : Saving previous values
 PG_OLD_BASE=${PG_BASE:-${PATH}}
 PG_OLD_HOME=${PG_HOME:-${PATH}}
-PG_OLD=${PG_ID:-${PATH}}
+PG_OLD=${PG_ID:-}
 PG_HOST=$(uname -n|gawk -F. '{print $1}')
 unset PGENV PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
 # }}}
@@ -93,13 +93,13 @@ fi
 PG_HOME=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $2}')
 if [ ! -x $PG_HOME/bin/psql ]; then
     PG_ID=$PG_OLD
-    unset PG_HOME PG_OLD PG_OLD_BASE _TERM _TRACE
+    unset PG_HOME PG_OLD PG_OLD_BASE PG_OLD_HOME _TERM _TRACE
     set +o xtrace
     return 1
 fi
 PG_BASE=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $3}')
 [ "x${PG_BASE}" = "x" ] && PG_BASE=$(grep postgres /etc/passwd|gawk -F: '{print $6}')
-PG_CONNINFO=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $4}')
+PG_CONNINFO="$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $4}')"
 PG_MASTER=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $5}')
 PG_ADMINS=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $6}')
 # {{{  Display a hint for the Standby
