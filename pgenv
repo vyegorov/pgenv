@@ -50,9 +50,9 @@ unset PGENV PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
 #  Defaults to the only one around, if this is the case
 : Get list of targets
 if [ "${SHELL##*/}" = "ksh" ]; then
-    set -A _TARGETS $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | gawk -F: '{print $1}')
+    set -A _TARGETS $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 )
 else
-    _TARGETS=( $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | gawk -F: '{print $1}') )
+    _TARGETS=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 ) )
 fi
 case ${#_TARGETS[*]} in
     0)  [ ${_TERM} = "YES" ] && echo "Nothing mentioned in ${_TAB}"
@@ -95,18 +95,18 @@ fi
 # }}}
 # {{{  -- Locate and set new target
 : Locating new target $PG_ID
-PG_HOME=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $2}')
+PG_HOME=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f2 )
 if [ ! -x $PG_HOME/bin/psql ]; then
     PG_ID=$PG_OLD
     unset PG_HOME PG_OLD PG_OLD_BASE PG_OLD_HOME _TERM _TRACE
     set +o xtrace
     return 1
 fi
-PG_BASE=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $3}')
-[ "x${PG_BASE}" = "x" ] && PG_BASE=$(grep ${USER} /etc/passwd|gawk -F: '{print $6}')
-PG_CONNINFO="$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $4}')"
-PG_MASTER=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $5}')
-PG_ADMINS=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $6}')
+PG_BASE=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f3 )
+[ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${USER} /etc/passwd | cut -d: -f6 )
+PG_CONNINFO="$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f4 )"
+PG_MASTER=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f5 )
+PG_ADMINS=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f6 )
 # {{{  Display a hint for the Standby
 if [ "x${PG_MASTER}" = "x" ]; then
     PG_TITLE="${PG_ID}@${PG_HOST}"
@@ -125,12 +125,12 @@ else
     fi
 fi
 # }}}
-PG_AUTOSTART=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $7}')
+PG_AUTOSTART=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f7 )
 OFS=$IFS
 if [ "${SHELL##*/}" = "ksh" ]; then
-    IFS=: set -A PGENV $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:")
+    IFS=: set -A PGENV $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" )
 else
-    IFS=: PGENV=( $(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:") )
+    IFS=: PGENV=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" ) )
 fi
 IFS=$OFS
 
@@ -142,10 +142,10 @@ PG_DATA=${PG_BASE}/data/${PG_ID}
 if [ ! -s $PG_DATA/postgresql.conf ]; then
     unset PGPORT
 else
-    PGPORT=$( grep "^#*port" $PG_DATA/postgresql.conf|sed -e 's/^#*//' -e 's/#.*$//'|gawk -F= '{gsub(/[ \t]/, "", $2); print $2}' )
+    PGPORT=$( grep "^#*port" $PG_DATA/postgresql.conf | sed -e 's/^#*//' -e 's/#.*$//' | gawk -F= '{gsub(/[ \t]/, "", $2); print $2}' )
 fi
-PG_VERSION=$($PG_HOME/bin/initdb --version|gawk '{ print $NF}')
-PG_MAJOR=$(echo ${PG_VERSION} | sed -e 's/\(\.[^.]*\)\..*$/\1/')
+PG_VERSION=$( $PG_HOME/bin/initdb --version | gawk '{ print $NF}' )
+PG_MAJOR=$( echo ${PG_VERSION} | sed -e 's/\(\.[^.]*\)\..*$/\1/' )
 
 PGDATA=${PG_DATA}
 # }}}
