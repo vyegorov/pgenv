@@ -21,8 +21,9 @@ while [ "$#" -gt 0 ]; do case "$1" in
     "-q")   #  -- Quiet --
         _TERM=NO ;;
     "-h")   #  -- Help message --
-        echo "${0##*/} [-h] [-i] [-q]"
+        echo "${0##*/} [-d] [-h] [-i] [-q]"
         echo "  -h\thelp message"
+        echo "  -d\tdebug execution (noisy)"
         echo "  -i\tinformation bout environment"
         echo "  -q\toperate quietly"
         return 0 ;;
