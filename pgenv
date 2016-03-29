@@ -9,6 +9,7 @@ _TAB=/etc/pgtab
 _TERM=NO
 _TRACE=NO
 [ -t 1 ] && _TERM=YES
+_USER=${USER}
 
 # {{{  -- Arguments --
 while [ "$#" -gt 0 ]; do case "$1" in
@@ -20,12 +21,15 @@ while [ "$#" -gt 0 ]; do case "$1" in
         return 0 ;;
     "-q")   #  -- Quiet --
         _TERM=NO ;;
+    "-p")   #  -- Postgres is the owner --
+        _USER=postgres ;;
     "-h")   #  -- Help message --
-        echo "${0##*/} [-d] [-h] [-i] [-q]"
+        echo "${0##*/} [-d] [-h] [-i] [-q] [-p]"
         echo "  -h\thelp message"
         echo "  -d\tdebug execution (noisy)"
         echo "  -i\tinformation bout environment"
         echo "  -q\toperate quietly"
+        echo "  -p\trelate all paths to the \`postgres\` user, not current one"
         return 0 ;;
     esac
     shift
@@ -99,7 +103,7 @@ if [ ! -x $PG_HOME/bin/psql ]; then
     return 1
 fi
 PG_BASE=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $3}')
-[ "x${PG_BASE}" = "x" ] && PG_BASE=$(grep postgres /etc/passwd|gawk -F: '{print $6}')
+[ "x${PG_BASE}" = "x" ] && PG_BASE=$(grep ${USER} /etc/passwd|gawk -F: '{print $6}')
 PG_CONNINFO="$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $4}')"
 PG_MASTER=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $5}')
 PG_ADMINS=$(grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | gawk -F: '{print $6}')
