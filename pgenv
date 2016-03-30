@@ -6,10 +6,7 @@
 
 #  -- Defaults --
 _TAB=/etc/pgtab
-_TERM=NO
-_TRACE=NO
 [ -t 1 ] && _TERM=YES
-_USER=${USER}
 
 # This functions extracts config values from PG files
 # Expects file and item names
@@ -32,51 +29,46 @@ while [ "$#" -gt 0 ]; do case "$1" in
         set +o xtrace
         return 0 ;;
     "-q")   #  -- Quiet --
-        _TERM=NO ;;
-    "-p")   #  -- Postgres is the owner --
-        _USER=postgres ;;
+        unset _TERM ;;
     "-h")   #  -- Help message --
         echo "${0##*/} [-d] [-h] [-i] [-q] [-p]"
         echo "  -h\thelp message"
         echo "  -d\tdebug execution (noisy)"
         echo "  -i\tinformation bout environment"
         echo "  -q\toperate quietly"
-        echo "  -p\trelate all paths to the \`postgres\` user, not current one"
         return 0 ;;
     esac
     shift
 done
 #  Enable tracing if asked for
-[ "${_TRACE}" = "YES" ] && set -o xtrace
+[ "${_TRACE:-}" = "YES" ] && set -o xtrace
+unset _TRACE
 # }}}
 # {{{  -- Check the environment --
-: Saving previous values
 PG_OLD_BASE=${PG_BASE:-}
 PG_OLD_HOME=${PG_HOME:-}
 PG_OLD=${PG_ID:-}
 PG_HOST=$(uname -n|gawk -F. '{print $1}')
-unset PGENV PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
+unset PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
 # }}}
 # {{{  -- Get list of targets --
 #
 #  Defaults to the only one around, if this is the case
-: Get list of targets
 if [ "${SHELL##*/}" = "ksh" ]; then
     set -A _TARGETS $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 )
 else
     _TARGETS=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 ) )
 fi
 case ${#_TARGETS[*]} in
-    0)  [ ${_TERM} = "YES" ] && echo "Nothing mentioned in ${_TAB}"
+    0)  [ ${_TERM:-} = "YES" ] && echo "Nothing mentioned in ${_TAB}"
+       unset _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST
        set +o xtrace
        return 1 ;;
     1)  PG_ID=${_TARGETS[0]} ;;
 esac
 # }}}
-# {{{  -- From here on all variables are exported --
-# XXX: Don't think this is a good idea any longer
-set -o allexport
-if [ "${_TERM:-""}" = "YES" ]; then
+# {{{  -- Pick target
+if [ ${_TERM:-} = "YES" ]; then
     : Choosing target
     if [ ${#_TARGETS[*]} -gt 1 ]; then
         i=1
@@ -97,45 +89,49 @@ if [ "${_TERM:-""}" = "YES" ]; then
       *) PG_ID=${PG_NEW} ;;
     esac
 fi
+unset PG_NEW _TARGETS
 # }}}
 # {{{  -- PG_ID can be empty here in case `-q` switch was used
-# XXX: Should anyhting be unset here?
 if [ "x${PG_ID}" = "x" ]; then
+    [ ${_TERM:-} = "YES" ] && echo "Empty PG_ID specified"
+    unset _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_ID
     set +o xtrace
     return 1
 fi
 # }}}
 # {{{  -- Locate and set new target
-: Locating binaries for new target $PG_ID
-PG_HOME=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f2 )
+PG_HOME=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f2 )
 if [ ! -x $PG_HOME/bin/psql ]; then
     PG_ID=$PG_OLD
-    [ ${_TERM} = "YES" ] && echo "Incomplete Postgres distribution"
-    unset PG_HOME PG_OLD PG_OLD_BASE PG_OLD_HOME _TERM _TRACE
+    [ ${_TERM:-} = "YES" ] && echo "Incomplete Postgres distribution"
+    unset _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_HOME
     set +o xtrace
     return 1
 fi
-PG_BASE=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f3 )
-[ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${_USER} /etc/passwd | cut -d: -f6 )
+PG_BASE=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f3 )
+[ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${USER} /etc/passwd | cut -d: -f6 )
+
 : Setting up configfile
-_C=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f4 )
+# Note, that ${USER} is used on purpose here!
+_C=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f4 )
 PG_CONF=${PG_BASE}/$_C
-[ -f ${PG_CONF} -a -r ${PG_CONF} ] || PG_CONF=$( grep ${USER} /etc/passwd | cut -d: -f6 )/$_C
+[ -f ${PG_CONF} -a -r ${PG_CONF} ] || PG_CONF=$( grep ${USER} /etc/passwd | cut -d: -f6 )/$_C; unset _C
 if [ ! -r ${PG_CONF} ] || [ ! -f ${PG_CONF} ]; then
     PG_ID=$PG_OLD
-    [ ${_TERM} = "YES" ] && echo "Cannot deal with specified config"
-    unset PG_HOME PG_OLD PG_OLD_BASE PG_OLD_HOME _TERM _TRACE
+    [ ${_TERM:-} = "YES" ] && echo "Cannot deal with specified config"
+    unset _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_HOME PG_BASE PG_CONF
     set +o xtrace
     return 1
 fi
+
 : Locating PGDATA
 _D=$( __get_conf_val ${PG_CONF} data_directory )
 [ "x${_D}" = "x" ] && _D=${PG_CONF%/*}
-PG_DATA=$_D
+PG_DATA=$_D; unset _D
 
-PG_CONNINFO="$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f5 )"
-PG_MASTER=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f6 )
-PG_ADMINS=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f7 )
+PG_CONNINFO="$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f5 )"
+PG_MASTER=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f6 )
+PG_ADMINS=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f7 )
 # {{{  Display a hint for the Standby
 if [ "x${PG_MASTER}" = "x" ]; then
     PG_TITLE="${PG_ID}@${PG_HOST}"
@@ -155,15 +151,10 @@ else
 fi
 # }}}
 PG_AUTOSTART=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f8 )
-OFS=$IFS
-if [ "${SHELL##*/}" = "ksh" ]; then
-    IFS=: set -A PGENV $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" )
-else
-    IFS=: PGENV=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" ) )
-fi
-IFS=$OFS
 
 export PG_ID=${PG_ID}
+export PGDATA=${PG_DATA}
+export PG_DATA=${PG_DATA}
 PG_LOG=${PG_BASE}/log/${PG_ID}
 PG_WAL=${PG_BASE}/wal/${PG_ID}
 PG_ARCH=${PG_BASE}/arch/${PG_ID}
@@ -189,9 +180,8 @@ if [ -d "${PG_BIN}" ]; then
     esac
 fi
 # }}}
-#[ ${_TERM} = "YES" ] && echo "Cluster set to ${PG_ID} with base at $PG_BASE"
-unset PG_OLD PG_NEW PG_OLD_HOME PG_OLD_BASE _TERM _TRACE PG_BIN
-set +o allexport
+unset PG_OLD PG_NEW PG_OLD_HOME PG_OLD_BASE _TERM PG_BIN
+unset PG_HOME _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_NEW
 set +o xtrace
 
 #
