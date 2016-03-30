@@ -11,6 +11,18 @@ _TRACE=NO
 [ -t 1 ] && _TERM=YES
 _USER=${USER}
 
+# This functions extracts config values from PG files
+# Expects file and item names
+# 1. `tac` prints lines from all the files in reverse order, so put most weighted files at the end
+# 2. sed filters for first line with the desired config (note the final `q`)
+# 3. remove the trailing comment
+# 4. get stuff after the `=` sign, getting rid of possible quotes
+# 5. final `q` implies only first match is processed
+__get_conf_val()
+{
+    tac ${1} ${1%.conf}.auto.conf | sed -nr '/^\s*'$2'/{s/\s*#.*$//;s/[^=]*=\s*'\''?(.*)'\''?/\1/p;q}'
+}
+
 # {{{  -- Arguments --
 while [ "$#" -gt 0 ]; do case "$1" in
     "-d")   #  -- Debuggin info --
@@ -39,8 +51,8 @@ done
 # }}}
 # {{{  -- Check the environment --
 : Saving previous values
-PG_OLD_BASE=${PG_BASE:-${PATH}}
-PG_OLD_HOME=${PG_HOME:-${PATH}}
+PG_OLD_BASE=${PG_BASE:-}
+PG_OLD_HOME=${PG_HOME:-}
 PG_OLD=${PG_ID:-}
 PG_HOST=$(uname -n|gawk -F. '{print $1}')
 unset PGENV PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
@@ -77,7 +89,7 @@ if [ "${_TERM:-""}" = "YES" ]; then
 
         printf "Cluster = [$PG_ID] ? "
         read PG_NEW
-        [ -z $(echo $PG_NEW | sed -e 's/[0-9]//g') ] && [ ! "x$PG_NEW" = "x" ] && PG_NEW=${_TARGETS[$PG_NEW-1]}
+        [ -z $( echo $PG_NEW | sed -e 's/[0-9]//g' ) ] && [ ! "x$PG_NEW" = "x" ] && PG_NEW=${_TARGETS[$PG_NEW-1]}
     fi
     #  -- Check input
     case "${PG_NEW:-""}" in
@@ -94,19 +106,36 @@ if [ "x${PG_ID}" = "x" ]; then
 fi
 # }}}
 # {{{  -- Locate and set new target
-: Locating new target $PG_ID
+: Locating binaries for new target $PG_ID
 PG_HOME=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f2 )
 if [ ! -x $PG_HOME/bin/psql ]; then
     PG_ID=$PG_OLD
+    [ ${_TERM} = "YES" ] && echo "Incomplete Postgres distribution"
     unset PG_HOME PG_OLD PG_OLD_BASE PG_OLD_HOME _TERM _TRACE
     set +o xtrace
     return 1
 fi
 PG_BASE=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f3 )
 [ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${USER} /etc/passwd | cut -d: -f6 )
-PG_CONNINFO="$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f4 )"
-PG_MASTER=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f5 )
-PG_ADMINS=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f6 )
+: Setting up configfile
+_C=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f4 )
+PG_CONF=${PG_BASE}/$_C
+[ -f ${PG_CONF} -a -r ${PG_CONF} ] || PG_CONF=$( grep ${USER} /etc/passwd | cut -d: -f6 )/$_C
+if [ ! -r ${PG_CONF} ] || [ ! -f ${PG_CONF} ]; then
+    PG_ID=$PG_OLD
+    [ ${_TERM} = "YES" ] && echo "Cannot deal with specified config"
+    unset PG_HOME PG_OLD PG_OLD_BASE PG_OLD_HOME _TERM _TRACE
+    set +o xtrace
+    return 1
+fi
+: Locating PGDATA
+_D=$( __get_conf_val ${PG_CONF} data_directory )
+[ "x${_D}" = "x" ] && _D=${PG_CONF%/*}
+PG_DATA=$_D
+
+PG_CONNINFO="$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f5 )"
+PG_MASTER=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f6 )
+PG_ADMINS=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f7 )
 # {{{  Display a hint for the Standby
 if [ "x${PG_MASTER}" = "x" ]; then
     PG_TITLE="${PG_ID}@${PG_HOST}"
@@ -125,7 +154,7 @@ else
     fi
 fi
 # }}}
-PG_AUTOSTART=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f7 )
+PG_AUTOSTART=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f8 )
 OFS=$IFS
 if [ "${SHELL##*/}" = "ksh" ]; then
     IFS=: set -A PGENV $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" )
@@ -138,7 +167,6 @@ export PG_ID=${PG_ID}
 PG_LOG=${PG_BASE}/log/${PG_ID}
 PG_WAL=${PG_BASE}/wal/${PG_ID}
 PG_ARCH=${PG_BASE}/arch/${PG_ID}
-PG_DATA=${PG_BASE}/data/${PG_ID}
 if [ ! -s $PG_DATA/postgresql.conf ]; then
     unset PGPORT
 else
