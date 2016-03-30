@@ -116,7 +116,7 @@ if [ ! -x $PG_HOME/bin/psql ]; then
     return 1
 fi
 PG_BASE=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f3 )
-[ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${USER} /etc/passwd | cut -d: -f6 )
+[ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${_USER} /etc/passwd | cut -d: -f6 )
 : Setting up configfile
 _C=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f4 )
 PG_CONF=${PG_BASE}/$_C
