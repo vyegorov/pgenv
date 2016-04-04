@@ -6,19 +6,33 @@
 
 #  -- Defaults --
 _TAB=/etc/pgtab
-[ -t 1 ] && _TERM=YES
+[ -t 1 ] && _TERM=1 || _TERM=0
 
-# This functions extracts config values from PG files
+# This functions extracts config values from PG files {{{
 # Expects file and item names
 # 1. `tac` prints lines from all the files in reverse order, so put most weighted files at the end
 # 2. sed filters for first line with the desired config (note the final `q`)
 # 3. remove the trailing comment
 # 4. get stuff after the `=` sign, getting rid of possible quotes
-# 5. final `q` implies only first match is processed
+# 5. final `q` ensures only first match is processed
 __get_conf_val()
 {
     tac ${1} ${1%.conf}.auto.conf | sed -nr '/^\s*'$2'/{s/\s*#.*$//;s/[^=]*=\s*'\''?(.*)'\''?/\1/p;q}'
-}
+} # }}}
+# Quit the script {{{
+__exit()
+{
+  set +o xtrace
+  [ $_TERM -eq 0 -a ! "x$2" = "x" ] && >&2 echo $2
+  unset _TAB _TERM _TARGETS _NEW _ID _ARR
+
+  if [ "${SHELL##*/}" = "ksh" ]; then
+    [ ${.sh.level} -eq 1 ] && echo "exit $1" && return
+  else
+    [ $0 = $BASH_SOURCE ] && echo "exit $1" && return
+  fi
+  echo "return $1"
+} # }}}
 
 # {{{  -- Arguments --
 while [ "$#" -gt 0 ]; do case "$1" in
@@ -26,29 +40,22 @@ while [ "$#" -gt 0 ]; do case "$1" in
         _TRACE=YES ;;
     "-i")   #  -- Current target --
         set|grep ^PG
-        set +o xtrace
-        return 0 ;;
+        eval $( __exit 0 ) ;;
     "-q")   #  -- Quiet --
-        unset _TERM ;;
+        _TERM=0 ;;
     "-h")   #  -- Help message --
         echo "${0##*/} [-d] [-h] [-i] [-q] [-p]"
         echo "  -h\thelp message"
         echo "  -d\tdebug execution (noisy)"
         echo "  -i\tinformation bout environment"
         echo "  -q\toperate quietly"
-        return 0 ;;
+        eval $( __exit 0 ) ;;
     esac
     shift
 done
 #  Enable tracing if asked for
 [ "${_TRACE:-}" = "YES" ] && set -o xtrace
 unset _TRACE
-# }}}
-# {{{  -- Check the environment --
-OLD_BASE=${PG_BASE:-}
-OLD_HOME=${PG_HOME:-}
-PG_OLD=${PG_ID:-}
-unset PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
 # }}}
 # {{{  -- Get list of targets --
 #
@@ -59,15 +66,12 @@ else
     _TARGETS=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 ) )
 fi
 case ${#_TARGETS[*]} in
-    0)  [ ${_TERM:-} = "YES" ] && echo "Nothing mentioned in ${_TAB}"
-       unset _TARGETS _TAB _TERM OLD_BASE OLD_HOME PG_OLD
-       set +o xtrace
-       return 1 ;;
-    1)  PG_ID=${_TARGETS[0]} ;;
+    0)  eval $( __exit 1 "No targets mentioned [ ${_TAB} ]" ) ;;
+    1)  _ID=${_TARGETS[0]} ;;
 esac
 # }}}
 # {{{  -- Pick target
-if [ ${_TERM:-} = "YES" ]; then
+if [ $_TERM -eq 1 ]; then
     : Choosing target
     if [ ${#_TARGETS[*]} -gt 1 ]; then
         i=1
@@ -76,104 +80,76 @@ if [ ${_TERM:-} = "YES" ]; then
             printf " %2d - %s\n" $i $id
             (( i=i+1 ))
         done
-        [ "x${PG_ID:-""}" = "x" ] && PG_ID=${_TARGETS[0]}
+        [ -z ${PG_ID+-} ] && _ID=${_TARGETS[0]} || _ID=${PG_ID}
 
-        printf "Cluster = [$PG_ID] ? "
-        read PG_NEW
-        [ -z $( echo $PG_NEW | sed -e 's/[0-9]//g' ) ] && [ ! "x$PG_NEW" = "x" ] && PG_NEW=${_TARGETS[$PG_NEW-1]}
+        printf "Cluster = [${_ID}] ? "
+        read _NEW
     fi
-    #  -- Check input
-    case "${PG_NEW:-""}" in
-      "") ;;
-      *) PG_ID=${PG_NEW} ;;
+    case "${_NEW:-}" in
+      '') ;;
+      *[!0-9]*) _ID=${_NEW} ;;
+      *) _ID=${_TARGETS[$_NEW-1]} ;;
     esac
 fi
-unset PG_NEW _TARGETS
+unset _NEW _TARGETS
+[ -z ${_ID+-} ] && eval $( __exit 1 "Empty PG_ID specified" )
 # }}}
-# {{{  -- PG_ID can be empty here in case `-q` switch was used
-if [ "x${PG_ID}" = "x" ]; then
-    [ ${_TERM:-} = "YES" ] && echo "Empty PG_ID specified"
-    unset _TAB _TERM OLD_BASE OLD_HOME PG_OLD PG_ID
-    set +o xtrace
-    return 1
+OFS=$IFS
+if [ "${SHELL##*/}" = "ksh" ]; then
+  IFS=: set -A _ARR $( grep "^$_ID:" "${_TAB}" )
+else
+  IFS=: _ARR=( $( grep "^$_ID:" "${_TAB}" ) )
 fi
-# }}}
+IFS=$OFS
+
 # {{{  -- Locate and set new target
-PG_HOME=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f2 )
-if [ ! -x $PG_HOME/bin/psql ]; then
-    PG_ID=$PG_OLD
-    [ ${_TERM:-} = "YES" ] && echo "Incomplete Postgres distribution"
-    unset _TAB _TERM OLD_BASE OLD_HOME PG_OLD PG_HOME
-    set +o xtrace
-    return 1
-fi
-PG_BASE=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f3 )
-[ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${USER} /etc/passwd | cut -d: -f6 )
+[ ! -x ${_ARR[1]}/bin/psql ] && eval $( __exit 1 "Incomplete Postgres distribution [ ${_ARR[1]} ]" )
+[ -z ${_ARR[2]} ] && _ARR[2]=$( grep ${USER} /etc/passwd | cut -d: -f6 )
 
 # Setting up configfile
-_C=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f4 )
-for _F in ${PG_BASE}/$_C $( grep ${USER} /etc/passwd | cut -d: -f6 )/$_C; do
-  [ -d $_F -a -r $_F ] && _F=$_F/postgresql.conf
-  if [ -f $_F ]; then
-    PG_CONF=$_F
-    break
-  fi
-done
-unset _C _F
-if [ "x{$PG_CONF:-}" = "x" ] || [ ! -r ${PG_CONF} ]; then
-    PG_ID=$PG_OLD
-    [ ${_TERM:-} = "YES" ] && echo "Cannot deal with specified config"
-    unset _TAB _TERM OLD_BASE OLD_HOME PG_OLD PG_HOME PG_BASE PG_CONF
-    set +o xtrace
-    return 1
-fi
-
-: Locating PGDATA
-_D=$( __get_conf_val ${PG_CONF} data_directory )
-[ "x${_D}" = "x" ] && _D=${PG_CONF%/*}
-PG_DATA=$_D; unset _D
-
-PG_CONNINFO="$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f5 )"
-PG_MASTER=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f6 )
-PG_ADMINS=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f7 )
-# {{{  Display a hint for the Standby
-if [ "x${PG_MASTER}" = "x" ]; then
-    PG_TITLE="${PG_ID}@$( uname -n | gawk -F. '{print $1}' )"
-else
-    PG_TITLE="Standby for ${PG_MASTER}"
-
-    if [ "${_TERM:-""}" = "YES" ]; then
-        echo
-        echo
-        echo "#  ----   S T A N D B Y   F A I L O V E R   ----"
-        echo
-        echo "To activate Standby, use any of the following:"
-        echo "1) pg_ctl promote"
-        echo "2) touch ${PG_BASE}/tmp/activate_${PG_ID}"
-        echo
+if [ ! -z ${_ARR[3]} ]; then
+  for _F in ${PG_BASE}/${_ARR[3]} $( grep ${USER} /etc/passwd | cut -d: -f6 )/${_ARR[3]}; do
+    [ -d $_F -a -r $_F ] && _F=$_F/postgresql.conf
+    if [ -f $_F ]; then
+      _ARR[10]=$_F
+      break
     fi
-fi
-# }}}
-PG_AUTOSTART=$( grep -vE "^#|^[ \t]*\$" "${_TAB}" | grep "^$PG_ID:" | cut -d: -f8 )
+  done; unset _F
+  [ -z ${_ARR[10]+-} ] || [ ! -r ${_ARR[10]} ] && eval $( __exit 1 "Cannot deal with config [ ${_ARR[3]} ]" )
 
-export PG_ID=${PG_ID}
-export PGDATA=${PG_DATA}
-export PG_DATA=${PG_DATA}
-PG_LOG=${PG_BASE}/log/${PG_ID}
-PG_WAL=${PG_BASE}/wal/${PG_ID}
-PG_ARCH=${PG_BASE}/arch/${PG_ID}
-if [ ! -s $PG_DATA/postgresql.conf ]; then
-    unset PGPORT
+  # Locating PGDATA
+  _ARR[11]=$( __get_conf_val ${_ARR[10]} data_directory )
+  [ -z "${_ARR[11]}" ] && _ARR[11]=${_ARR[10]%/*}
+fi
+
+# At this point all checks are over, so output and exports are fine
+if [ -s ${_ARR[11]}/recovery.conf ]; then
+  if [ ${_TERM} -eq 1 ]; then
+    _T=$( __get_conf_val ${_ARR[11]}/recovery.conf trigger_file )
+    echo
+    echo
+    echo "#  ----   S T A N D B Y   F A I L O V E R   ----"
+    echo 
+    echo "To activate Standby, use any of the following:"
+    echo "* pg_ctl promote"
+    [ ! -z ${_T} ] && echo "* touch ${_T}"
+    echo
+    echo
+  fi
+  PG_PROMPT="${_ARR[0]} (standby)"
 else
-    PGPORT=$( grep "^#*port" $PG_DATA/postgresql.conf | sed -e 's/^#*//' -e 's/#.*$//' | gawk -F= '{gsub(/[ \t]/, "", $2); print $2}' )
+  PG_PROMPT=${_ARR[0]}
 fi
-PG_VERSION=$( $PG_HOME/bin/initdb --version | gawk '{ print $NF}' )
-PG_MAJOR=$( echo ${PG_VERSION} | sed -e 's/\(\.[^.]*\)\..*$/\1/' )
+export PG_PROMPT
 
-PGDATA=${PG_DATA}
-# }}}
+export PG_ID=${_ARR[0]}
+export PG_HOME=${_ARR[1]}
+[ ! -z ${_ARR[11]} ] && export PGDATA=${_ARR[11]} || unset PGDATA
+[ ! -z ${_ARR[10]} ] && export PGPORT=$( __get_conf_val ${_ARR[10]} port ); [ -z $PGPORT ] && unset PGPORT
+
 # {{{  -- Put new PG_ID into PATH and reset other vars --
-PG_BIN="${PG_HOME}/bin"
+OLD_HOME=${PG_HOME:-}
+PG_BIN="${_ARR[1]}/bin"
 if [ -d "${PG_BIN}" ]; then
     case "$PATH" in
       *${OLD_HOME}/bin*) PATH=`echo ${PATH} | sed "s;${OLD_HOME}/bin;${PG_BIN};g"` ;;
@@ -183,10 +159,10 @@ if [ -d "${PG_BIN}" ]; then
       *) PATH=${PATH}:${PG_BIN} ;;
     esac
 fi
+unset PG_BIN OLD_HOME
 # }}}
-unset PG_HOME PG_BIN _TAB _TERM PG_OLD
-set +o xtrace
 
-#
-# vim:ts=4 et sw=4 ai
+eval $( __exit 0 )
+
+# vim:ts=4 sw=4 et ai fen fdm=marker
 #
