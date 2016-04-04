@@ -150,7 +150,12 @@ export PG_BASE=${_ARR[2]}
 [ ! -z ${_ARR[5]} ] && export PG_ADMINS=${_ARR[5]} || unset PG_ADMINS
 [ ! -z ${_ARR[10]} ] && export PG_CONF=${_ARR[10]} || unset PG_CONF
 [ ! -z ${_ARR[11]} ] && export PGDATA=${_ARR[11]} || unset PGDATA
-[ ! -z ${_ARR[10]} ] && export PGPORT=$( __get_conf_val ${_ARR[10]} port ); [ -z $PGPORT ] && unset PGPORT
+# Special handling for PGPORT required, as compiled-in defaults
+# can differ for manually compiled sources. In such cases
+# port remains commented in the supplied during init `postgresql.conf`.
+# Accessing such instances via binaries from other supplier can lead to
+# unexpected messages.
+[ ! -z ${_ARR[11]} ] && export PGPORT=$( tac ${_ARR[11]}/postgresql*.conf | sed -nr '/^[\s#]*port/{s/\s*#[^#]*$//;s/[^=]*=\s*'\''?(.*)'\''?/\1/p;q}' ); [ -z $PGPORT ] && unset PGPORT
 
 # {{{  -- Put new PG_ID into PATH and reset other vars --
 OLD_HOME=${PG_HOME:-}
