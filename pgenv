@@ -45,10 +45,9 @@ done
 unset _TRACE
 # }}}
 # {{{  -- Check the environment --
-PG_OLD_BASE=${PG_BASE:-}
-PG_OLD_HOME=${PG_HOME:-}
+OLD_BASE=${PG_BASE:-}
+OLD_HOME=${PG_HOME:-}
 PG_OLD=${PG_ID:-}
-PG_HOST=$(uname -n|gawk -F. '{print $1}')
 unset PG_MASTER PG_VERSION PG_WAL PG_LOG PG_ARCH
 # }}}
 # {{{  -- Get list of targets --
@@ -61,7 +60,7 @@ else
 fi
 case ${#_TARGETS[*]} in
     0)  [ ${_TERM:-} = "YES" ] && echo "Nothing mentioned in ${_TAB}"
-       unset _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST
+       unset _TARGETS _TAB _TERM OLD_BASE OLD_HOME PG_OLD
        set +o xtrace
        return 1 ;;
     1)  PG_ID=${_TARGETS[0]} ;;
@@ -94,7 +93,7 @@ unset PG_NEW _TARGETS
 # {{{  -- PG_ID can be empty here in case `-q` switch was used
 if [ "x${PG_ID}" = "x" ]; then
     [ ${_TERM:-} = "YES" ] && echo "Empty PG_ID specified"
-    unset _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_ID
+    unset _TAB _TERM OLD_BASE OLD_HOME PG_OLD PG_ID
     set +o xtrace
     return 1
 fi
@@ -104,22 +103,27 @@ PG_HOME=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f2 )
 if [ ! -x $PG_HOME/bin/psql ]; then
     PG_ID=$PG_OLD
     [ ${_TERM:-} = "YES" ] && echo "Incomplete Postgres distribution"
-    unset _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_HOME
+    unset _TAB _TERM OLD_BASE OLD_HOME PG_OLD PG_HOME
     set +o xtrace
     return 1
 fi
 PG_BASE=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f3 )
 [ "x${PG_BASE}" = "x" ] && PG_BASE=$( grep ${USER} /etc/passwd | cut -d: -f6 )
 
-: Setting up configfile
-# Note, that ${USER} is used on purpose here!
+# Setting up configfile
 _C=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f4 )
-PG_CONF=${PG_BASE}/$_C
-[ -f ${PG_CONF} -a -r ${PG_CONF} ] || PG_CONF=$( grep ${USER} /etc/passwd | cut -d: -f6 )/$_C; unset _C
-if [ ! -r ${PG_CONF} ] || [ ! -f ${PG_CONF} ]; then
+for _F in ${PG_BASE}/$_C $( grep ${USER} /etc/passwd | cut -d: -f6 )/$_C; do
+  [ -d $_F -a -r $_F ] && _F=$_F/postgresql.conf
+  if [ -f $_F ]; then
+    PG_CONF=$_F
+    break
+  fi
+done
+unset _C _F
+if [ "x{$PG_CONF:-}" = "x" ] || [ ! -r ${PG_CONF} ]; then
     PG_ID=$PG_OLD
     [ ${_TERM:-} = "YES" ] && echo "Cannot deal with specified config"
-    unset _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_HOME PG_BASE PG_CONF
+    unset _TAB _TERM OLD_BASE OLD_HOME PG_OLD PG_HOME PG_BASE PG_CONF
     set +o xtrace
     return 1
 fi
@@ -134,7 +138,7 @@ PG_MASTER=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f6 )
 PG_ADMINS=$( grep "^$PG_ID:" "${_TAB}" | cut -d: -f7 )
 # {{{  Display a hint for the Standby
 if [ "x${PG_MASTER}" = "x" ]; then
-    PG_TITLE="${PG_ID}@${PG_HOST}"
+    PG_TITLE="${PG_ID}@$( uname -n | gawk -F. '{print $1}' )"
 else
     PG_TITLE="Standby for ${PG_MASTER}"
 
@@ -172,7 +176,7 @@ PGDATA=${PG_DATA}
 PG_BIN="${PG_HOME}/bin"
 if [ -d "${PG_BIN}" ]; then
     case "$PATH" in
-      *${PG_OLD_HOME}/bin*) PATH=`echo ${PATH} | sed "s;${PG_OLD_HOME}/bin;${PG_BIN};g"` ;;
+      *${OLD_HOME}/bin*) PATH=`echo ${PATH} | sed "s;${OLD_HOME}/bin;${PG_BIN};g"` ;;
       *${PG_BIN}*) ;;
       *:) PATH=${PATH}${PG_BIN} ;;
       "") PATH=${PG_BIN} ;;
@@ -180,8 +184,7 @@ if [ -d "${PG_BIN}" ]; then
     esac
 fi
 # }}}
-unset PG_OLD PG_NEW PG_OLD_HOME PG_OLD_BASE _TERM PG_BIN
-unset PG_HOME _TARGETS _TAB _TERM PG_OLD_BASE PG_OLD_HOME PG_OLD PG_HOST PG_NEW
+unset PG_HOME PG_BIN _TAB _TERM PG_OLD
 set +o xtrace
 
 #
