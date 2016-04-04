@@ -106,7 +106,7 @@ IFS=$OFS
 [ ! -x ${_ARR[1]}/bin/psql ] && eval $( __exit 1 "Incomplete Postgres distribution [ ${_ARR[1]} ]" )
 [ -z ${_ARR[2]} ] && _ARR[2]=$( grep ${USER} /etc/passwd | cut -d: -f6 )
 
-# Setting up configfile
+# Configfile
 if [ ! -z ${_ARR[3]} ]; then
   for _F in ${PG_BASE}/${_ARR[3]} $( grep ${USER} /etc/passwd | cut -d: -f6 )/${_ARR[3]}; do
     [ -d $_F -a -r $_F ] && _F=$_F/postgresql.conf
@@ -121,6 +121,7 @@ if [ ! -z ${_ARR[3]} ]; then
   _ARR[11]=$( __get_conf_val ${_ARR[10]} data_directory )
   [ -z "${_ARR[11]}" ] && _ARR[11]=${_ARR[10]%/*}
 fi
+# }}}
 
 # At this point all checks are over, so output and exports are fine
 if [ -s ${_ARR[11]}/recovery.conf ]; then
@@ -129,7 +130,7 @@ if [ -s ${_ARR[11]}/recovery.conf ]; then
     echo
     echo
     echo "#  ----   S T A N D B Y   F A I L O V E R   ----"
-    echo 
+    echo
     echo "To activate Standby, use any of the following:"
     echo "* pg_ctl promote"
     [ ! -z ${_T} ] && echo "* touch ${_T}"
@@ -144,6 +145,10 @@ export PG_PROMPT
 
 export PG_ID=${_ARR[0]}
 export PG_HOME=${_ARR[1]}
+export PG_BASE=${_ARR[2]}
+[ ! -z ${_ARR[4]} ] && export PG_CONNINFO=${_ARR[4]} || unset PG_CONNINFO
+[ ! -z ${_ARR[5]} ] && export PG_ADMINS=${_ARR[5]} || unset PG_ADMINS
+[ ! -z ${_ARR[10]} ] && export PG_CONF=${_ARR[10]} || unset PG_CONF
 [ ! -z ${_ARR[11]} ] && export PGDATA=${_ARR[11]} || unset PGDATA
 [ ! -z ${_ARR[10]} ] && export PGPORT=$( __get_conf_val ${_ARR[10]} port ); [ -z $PGPORT ] && unset PGPORT
 

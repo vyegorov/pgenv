@@ -4,7 +4,7 @@
 #
 # All lines starting with hash sign (#) or empty ones are ignored
 # the rest should be of the following form:
-# PG_ID:PG_HOME:PG_BASE:PG_CONNINFO:PG_MASTER:PG_ADMINS:PG_AUTO
+# PG_ID:PG_HOME:PG_BASE:PG_CONF:PG_CONNINFO:PG_ADMINS:PG_AUTO
 #
 # PG_ID       Instance name to be reference target in all the scripts
 #
@@ -26,14 +26,10 @@
 # PG_CONNINFO Conninfo string for the "other" databases, where "other" means
 #             not owned by current OS user (including remote ones)
 #
-# PG_MASTER   Specifies the PG_ID and host of the Master instance the current one
-#             being a Standby for. Should be in the form "PG_ID@HOSTNAME", terminal title will
-#             be updated accordingly
-#
 # PG_ADMINS   List of administrator e-mails that will receive scary messages
 #
 # PG_AUTO     If set to 'Y', then PostgreSQL database will be honored by init scripts
 #             NOTE! Keep this field the last one!
 #
 
-PG93:/usr/lib/pgsql-9.3::data/PG93/postgresql.conf:::vyegorov@gmail.com:Y
+PG93:/usr/lib/pgsql-9.3::data/PG93/postgresql.conf::vyegorov@gmail.com:Y
