@@ -17,7 +17,7 @@ _TAB=/etc/pgtab
 # 5. final `q` ensures only first match is processed
 __get_conf_val()
 {
-    tac ${1} ${1%.conf}.auto.conf | sed -nr '/^\s*'$2'/{s/\s*#.*$//;s/[^=]*=\s*'\''?(.*)'\''?/\1/p;q}'
+    tac ${1} | sed -nr '/^\s*'$2'/{s/\s*#.*$//;s/[^=]*=\s*(["'\'']?)(.*)\1/\2/p;q}'
 } # }}}
 # Quit the script {{{
 __exit()
@@ -102,7 +102,7 @@ else
 fi
 IFS=$OFS
 
-# {{{  -- Locate and set new target
+# {{{  -- Setup target
 [ ! -x ${_ARR[1]}/bin/psql ] && eval $( __exit 1 "Incomplete Postgres distribution [ ${_ARR[1]} ]" )
 [ -z ${_ARR[2]} ] && _ARR[2]=$( grep ${USER} /etc/passwd | cut -d: -f6 )
 
@@ -120,6 +120,12 @@ if [ ! -z ${_ARR[3]} ]; then
   # Locating PGDATA
   _ARR[11]=$( __get_conf_val ${_ARR[10]} data_directory )
   [ -z "${_ARR[11]}" ] && _ARR[11]=${_ARR[10]%/*}
+
+  # Add `ALTER SYSTEM` file, if exists
+  _ARR[12]=_${_ARR[10]}
+  [ -f ${_ARR[11]}/postgresql.auto.conf ] && _ARR[12]="${_ARR[12]} ${_ARR[11]}/postgresql.auto.conf"
+else
+  eval $( __exit 1 "Specify PostgreSQL config file" )
 fi
 # }}}
 
@@ -155,7 +161,7 @@ export PG_BASE=${_ARR[2]}
 # port remains commented in the supplied during init `postgresql.conf`.
 # Accessing such instances via binaries from other supplier can lead to
 # unexpected messages.
-[ ! -z ${_ARR[11]} ] && export PGPORT=$( tac ${_ARR[11]}/postgresql*.conf | sed -nr '/^[\s#]*port/{s/\s*#[^#]*$//;s/[^=]*=\s*'\''?(.*)'\''?/\1/p;q}' ); [ -z $PGPORT ] && unset PGPORT
+[ ! -z ${_ARR[11]} ] && export PGPORT=$( tac ${_ARR[12]} | sed -nr '/^[\s#]*port/{s/\s*#[^#]*$//;s/[^=]*=\s*(["'\'']?)(.*)\1/\2/p;q}' ); [ -z $PGPORT ] && unset PGPORT
 
 # {{{  -- Put new PG_ID into PATH and reset other vars --
 OLD_HOME=${PG_HOME:-}
