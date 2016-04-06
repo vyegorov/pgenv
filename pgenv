@@ -23,7 +23,7 @@ __get_conf_val()
 __exit()
 {
   set +o xtrace
-  [ $_TERM -eq 0 -a ! "x$2" = "x" ] && >&2 echo $2
+  [ $_TERM -eq 1 -a ! -z "$2" ] && echo "echo \"$2\";"
   unset _TAB _TERM _TARGETS _NEW _ID _ARR
 
   if [ "${SHELL##*/}" = "ksh" ]; then
@@ -66,7 +66,7 @@ else
     _TARGETS=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 ) )
 fi
 case ${#_TARGETS[*]} in
-    0)  eval $( __exit 1 "No targets mentioned [ ${_TAB} ]" ) ;;
+    0)  eval $( __exit 1 "No targets mentioned in \`${_TAB}\`" ) ;;
     1)  _ID=${_TARGETS[0]} ;;
 esac
 # }}}
@@ -103,7 +103,7 @@ fi
 IFS=$OFS
 
 # {{{  -- Setup target
-[ ! -x ${_ARR[1]}/bin/psql ] && eval $( __exit 1 "Incomplete Postgres distribution [ ${_ARR[1]} ]" )
+[ ! -x ${_ARR[1]}/bin/psql ] && eval $( __exit 1 "Incomplete Postgres distribution: ${_ARR[1]}" )
 [ -z ${_ARR[2]} ] && _ARR[2]=$( grep ${USER} /etc/passwd | cut -d: -f6 )
 
 # Configfile
@@ -115,7 +115,7 @@ if [ ! -z ${_ARR[3]} ]; then
       break
     fi
   done; unset _F
-  [ -z ${_ARR[10]+-} ] || [ ! -r ${_ARR[10]} ] && eval $( __exit 1 "Cannot deal with config [ ${_ARR[3]} ]" )
+  [ -z ${_ARR[10]+-} ] || [ ! -r ${_ARR[10]} ] && eval $( __exit 1 "Cannot deal with config: ${_ARR[3]}" )
 
   # Locating PGDATA
   _ARR[11]=$( __get_conf_val ${_ARR[10]} data_directory )
@@ -125,7 +125,7 @@ if [ ! -z ${_ARR[3]} ]; then
   _ARR[12]=${_ARR[10]}
   [ -f ${_ARR[11]}/postgresql.auto.conf ] && _ARR[12]="${_ARR[12]} ${_ARR[11]}/postgresql.auto.conf"
 else
-  eval $( __exit 1 "Specify PostgreSQL config file" )
+  eval $( __exit 1 "Specify PostgreSQL config file for \`$_ARR[0]\`" )
 fi
 # }}}
 
