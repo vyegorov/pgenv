@@ -122,7 +122,7 @@ if [ ! -z ${_ARR[3]} ]; then
   [ -z "${_ARR[11]}" ] && _ARR[11]=${_ARR[10]%/*}
 
   # Add `ALTER SYSTEM` file, if exists
-  _ARR[12]=_${_ARR[10]}
+  _ARR[12]=${_ARR[10]}
   [ -f ${_ARR[11]}/postgresql.auto.conf ] && _ARR[12]="${_ARR[12]} ${_ARR[11]}/postgresql.auto.conf"
 else
   eval $( __exit 1 "Specify PostgreSQL config file" )
