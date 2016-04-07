@@ -153,6 +153,7 @@ export PG_PROMPT
 export PG_ID=${_ARR[0]}
 export PG_HOME=${_ARR[1]}
 export PG_BASE=${_ARR[2]}
+export PG_LOG=${PG_BASE}/log/${PG_ID}
 [ ! -z ${_ARR[4]} ] && export PG_CONNINFO=${_ARR[4]} || unset PG_CONNINFO
 [ ! -z ${_ARR[5]} ] && export PG_ADMINS=${_ARR[5]} || unset PG_ADMINS
 [ ! -z ${_ARR[10]} ] && export PG_CONF=${_ARR[10]} || unset PG_CONF
