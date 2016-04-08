@@ -1,4 +1,4 @@
-#!/bin/ksh
+#!/bin/bash
 
 # {{{ hashid, format, abort, report 
 hashid()

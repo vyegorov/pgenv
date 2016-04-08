@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 #  Define PostgreSQL environment variables for ease of work
 #
@@ -29,7 +29,7 @@ __exit()
   if [ "${SHELL##*/}" = "ksh" ]; then
     [ ${.sh.level} -eq 1 ] && echo "exit $1" && return
   else
-    [ $0 = $BASH_SOURCE ] && echo "exit $1" && return
+    [ ! -z $BASH_SOURCE ] && [ $0 = $BASH_SOURCE ] && echo "exit $1" && return
   fi
   echo "return $1"
 } # }}}
