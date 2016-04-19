@@ -1,13 +1,14 @@
 
 prefix = ~/bin
+tmp = ~/tmp
 
 #  -----  #
 FILES := pgenv pgjob
 TARGETS := $(foreach b,$(FILES),$(prefix)/$(b))
 
-all: $(D) $(TARGETS)
+all: $(prefix) $(TARGETS) $(tmp)
 
-$(D):
+$(prefix) $(tmp):
 	mkdir -p $@
 	
 # Adding two-phase expansion, otherwise
