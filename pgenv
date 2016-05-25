@@ -90,6 +90,8 @@ if [ $_TERM -eq 1 ]; then
       *[!0-9]*) _ID=${_NEW} ;;
       *) _ID=${_TARGETS[$_NEW-1]} ;;
     esac
+else
+  _ID=${PG_ID}
 fi
 unset _NEW _TARGETS
 [ -z ${_ID+-} ] && eval $( __exit 1 "Empty PG_ID specified" )
