@@ -26,8 +26,8 @@ __exit()
   [ $_TERM -eq 1 -a ! -z "$2" ] && echo "echo \"$2\" ;"
   echo "unset _TAB _TERM _TARGETS _NEW _ID _ARR __exit __get_conf_val ;"
 
-  if [ "${SHELL##*/}" = "ksh" ]; then
-    [ ${.sh.level} -eq 1 ] && echo "exit $1" && return
+  if [ -z ${BASH+-} ]; then
+    [ ${SHLVL} -eq 2 ] && echo "exit $1" && return
   else
     [ ! -z $BASH_SOURCE ] && [ $0 = $BASH_SOURCE ] && echo "exit $1" && return
   fi
@@ -60,7 +60,7 @@ unset _TRACE
 # {{{  -- Get list of targets --
 #
 #  Defaults to the only one around, if this is the case
-if [ "${SHELL##*/}" = "ksh" ]; then
+if [ -z ${BASH+-} ]; then
     set -A _TARGETS $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 )
 else
     _TARGETS=( $( grep -vE "^#|^[ \t]*\$" "${_TAB}" | cut -d: -f1 ) )
@@ -97,13 +97,14 @@ unset _NEW _TARGETS
 [ -z ${_ID+-} ] && eval $( __exit 1 "Empty PG_ID specified" )
 # }}}
 OFS=$IFS
-if [ "${SHELL##*/}" = "ksh" ]; then
-  IFS=: set -A _ARR $( grep "^$_ID:" "${_TAB}" )
+if [ -z ${BASH+-} ]; then
+  set -A _ARR $( grep "^$_ID:" "${_TAB}" | tr ':' ' ' )
 else
   IFS=: _ARR=( $( grep "^$_ID:" "${_TAB}" ) )
 fi
 IFS=$OFS
 unset _ID
+: $_ARR
 
 # {{{  -- Setup target
 [ ! -x ${_ARR[1]}/bin/psql ] && eval $( __exit 1 "Incomplete Postgres distribution \\\`${_ARR[1]}\\\`" )
@@ -111,7 +112,7 @@ unset _ID
 
 # Configfile
 if [ ! -z ${_ARR[3]} ]; then
-  for _F in ${PG_BASE}/${_ARR[3]} $( grep ${USER} /etc/passwd | cut -d: -f6 )/${_ARR[3]}; do
+  for _F in ${_ARR[2]}/${_ARR[3]} $( grep ${USER} /etc/passwd | cut -d: -f6 )/${_ARR[3]}; do
     [ -d $_F -a -r $_F ] && _F=$_F/postgresql.conf
     if [ -f $_F ]; then
       _ARR[10]=$_F
