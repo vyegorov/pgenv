@@ -112,9 +112,9 @@ unset _ID
 
 # Configfile
 if [ ! -z ${_ARR[3]} ]; then
-  for _F in ${_ARR[2]}/${_ARR[3]} $( grep ${USER} /etc/passwd | cut -d: -f6 )/${_ARR[3]} ${_ARR[3]} $( pwd )/${_ARR[3]}; do
+  for _F in ${_ARR[3]} ${_ARR[2]}/${_ARR[3]} $( grep ${USER} /etc/passwd | cut -d: -f6 )/${_ARR[3]}; do
     [ -d $_F -a -r $_F ] && _F=$_F/postgresql.conf
-    if [ -f $_F ]; then
+    if [ -f $_F -a $_F != ${_F#/} ]; then
       _ARR[10]=$_F
       break
     fi
