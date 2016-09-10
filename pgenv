@@ -154,7 +154,7 @@ else
 fi
 export PG_PROMPT
 
-OLD_HOME=${PG_HOME:-}
+OLD_HOME=${PG_HOME:-...}
 export PG_ID=${_ARR[0]}
 export PG_HOME=${_ARR[1]}
 export PG_BASE=${_ARR[2]}
