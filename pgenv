@@ -154,6 +154,7 @@ else
 fi
 export PG_PROMPT
 
+OLD_HOME=${PG_HOME:-}
 export PG_ID=${_ARR[0]}
 export PG_HOME=${_ARR[1]}
 export PG_BASE=${_ARR[2]}
@@ -170,7 +171,6 @@ export PG_LOG=${PG_BASE}/log/${PG_ID}
 [ ! -z ${_ARR[11]} ] && export PGPORT=$( cat ${_ARR[12]} | tac | sed -nr '/^[\s#]*port/{s/\s*#[^#]*$//;s/[^=]*=\s*(["'\'']?)(.*)\1/\2/p;q}' ); [ -z $PGPORT ] && unset PGPORT
 
 # {{{  -- Put new PG_ID into PATH --
-OLD_HOME=${PG_HOME:-}
 PG_BIN="${_ARR[1]}/bin"
 if [ -d "${PG_BIN}" ]; then
     case "$PATH" in
